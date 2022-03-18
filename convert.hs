@@ -98,7 +98,7 @@ instance Render JavaMethod where
             | otherwise = methodModifiers <> " " <> fromJust methodReturnType <> " "
 
         renderDocTag :: (T.Text, Maybe T.Text) -> T.Text
-        renderDocTag ("Returns:", Just val) = "@returns " <> val
+        renderDocTag ("Returns:", Just val) = "@return " <> val
         renderDocTag ("Parameters:", Just val) = "@param " <> T.unwords (T.splitOn " - " val)
         renderDocTag ("Overrides:", Nothing) = "@overrides"
         renderDocTag ("inheritDoc", Nothing) = "{@inheritDoc}"
@@ -216,7 +216,7 @@ getClass res pacName clsPage =
         cons <- chroots ("section" @: [hasClass "constructorDetails"] // "li" @: [hasClass "blockList"]) scrapeMethod
         methods <- chroots ("section" @: [hasClass "methodDetails"] // "li" @: [hasClass "blockList"]) scrapeMethod
 
-        pure $ JavaClass name clsSig description cons methods
+        pure $ JavaClass name (T.unwords $ T.lines $ T.replace "\r" "" $ clsSig) description cons methods
 
 getEnum :: Resource -> T.Text -> T.Text -> IO (Maybe JavaEnum)
 getEnum res pacName enuPage =
@@ -234,7 +234,7 @@ scrapeMethod = chroot ("section" @: [hasClass "detail"]) $ do
     description <- (text $ "div" @: [hasClass "block"]) <|> pure ""
     argumentsTypesStr <- (texts $ "div" @: [hasClass "memberSignature"] // "span" @: [hasClass "arguments"]) <|> pure []
     let argumentTypes = if null argumentsTypesStr then [] else
-            map ((\[a, b] -> (b, T.replace "\x200b" " " a)) . T.split (== '\160') . T.takeWhile (/= ')')) $ T.splitOn ",\r\n" $ head argumentsTypesStr
+            map ((\[a, b] -> (b, T.replace "\x200b" " " a)) . T.split (== '\160') . T.takeWhile (/= ')')) $ T.splitOn ",\n" $ T.replace "\r" "" $ head argumentsTypesStr
 
     params <- (<|> pure []) $ chroot "dl" $ inSerial $ do
         many $ do
