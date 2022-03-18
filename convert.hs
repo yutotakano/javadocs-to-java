@@ -1,4 +1,4 @@
-#!/usr/bin/env stack --resolver lts-18.24 --install-ghc runghc --package scalpel --package neat-interpolation --package tagsoup --package unordered-containers
+#!/usr/bin/env stack --resolver lts-18.24 --install-ghc runghc --package scalpel --package unordered-containers
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
