@@ -5,19 +5,20 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Main where
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Applicative
 import Control.Concurrent.MVar
+import Data.ByteString.Lazy qualified as BL
 import Data.Default (def)
+import Data.HashMap.Strict qualified as HM
+import Data.Maybe
+import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Text.HTML.Scalpel
 import Text.Printf
 import System.Directory
-import Data.ByteString.Lazy qualified as BL
-import Data.Text qualified as T
-import Data.Text.IO qualified as TIO
-import Data.Maybe
-import Control.Monad
-import Data.HashMap.Strict qualified as HM
+import System.Environment (getArgs)
 
 -- | Helper to comment some text. No word-wrapping.
 commentify :: Int -> T.Text -> T.Text
@@ -91,7 +92,7 @@ instance Render JavaMethod where
 
         mods :: T.Text
         mods
-            | methodModifiers == "" && methodReturnType == Nothing = "" 
+            | methodModifiers == "" && methodReturnType == Nothing = ""
             | methodModifiers == "" = fromJust methodReturnType <> " "
             | methodReturnType == Nothing = methodModifiers <> " "
             | otherwise = methodModifiers <> " " <> fromJust methodReturnType <> " "
@@ -121,17 +122,24 @@ instance Render JavaEnum where
         enumConsts :: T.Text
         enumConsts = T.intercalate ", " enumValues
 
-type BaseUrl = String
-
-defaultBaseUrl :: BaseUrl
-defaultBaseUrl = "https://homepages.inf.ed.ac.uk/s2100747"
-
 main :: IO ()
 main = do
+    args <- getArgs
+    res <- case args of
+        ["online", url] -> pure $ InternetResource url
+        ["local", dirname] -> pure $ LocalResource dirname
+        _ -> error $
+            "Supply either an online JavaDoc base host or a local path:\n" <>
+            "\n" <>
+            "  ./converter.hs online https://javadoc.page.without.trailing.slash\n" <>
+            "  ./converter.hs local the_dirname_without_trailing_slash\n" <>
+            "\n" <>
+            "All files will be requested by appending e.g. /index.html to the given base url/path.\n" <>
+            "The output will be a \"src\" folder. Import statements are not added automatically, so\n" <>
+            "please use something like IntelliJ to go through and fix any missing imports.\n\n"
     exists <- doesDirectoryExist "src"
-    when exists $ error "`src` directory already exists! This program will not overwrite it, so please delete/move the existing folder."
+    when exists $ error "`src` directory already exists!\nThis program will not overwrite it, so please delete/move the existing folder.\n\n"
     createDirectory "src"
-    let res = InternetResource defaultBaseUrl
     packageNames <- getPackageNames res
     packages <- catMaybes <$> mapM (getPackage res) packageNames
     forM_ packages $ \pac -> do
@@ -146,22 +154,16 @@ main = do
             TIO.writeFile (T.unpack $ "src" <> "/" <> packageName pac <> "/" <> enumName enu <> ".java") $
                 "package " <> packageName pac <> ";\n\n" <> render enu
 
-class Resource a where
-    scrapeRes :: a -> String -> ScraperT T.Text IO b -> IO (Maybe b)
+data Resource = InternetResource String | LocalResource String
 
-data InternetResource = InternetResource BaseUrl
-data LocalResource = LocalResource String
+scrapeRes :: Resource -> String -> ScraperT T.Text IO a -> IO (Maybe a)
+scrapeRes (InternetResource baseUrl) page scraper =
+    join $ scrapeT scraper `liftM` fetchTagsWithConfig def (baseUrl <> "/" <> page)
+scrapeRes (LocalResource dir) page scraper = do
+    contents <- TIO.readFile $ dir <> "/" <> page
+    scrapeStringLikeT contents scraper
 
-instance Resource InternetResource where
-    scrapeRes (InternetResource baseUrl) page scraper =
-        join $ scrapeT scraper `liftM` fetchTagsWithConfig def (baseUrl <> "/" <> page)
-
-instance Resource LocalResource where
-    scrapeRes (LocalResource dir) page scraper = do
-        contents <- TIO.readFile $ dir <> "/" <> page
-        scrapeStringLikeT contents scraper
-
-getPackageNames :: (Resource a) => a -> IO ([T.Text])
+getPackageNames :: Resource -> IO ([T.Text])
 getPackageNames res =
     fmap (maybe [] id) $ scrapeRes res "index.html" $
         chroots ("tbody" // "tr" // "th") $
@@ -169,7 +171,7 @@ getPackageNames res =
 
 data FileTypes = JavaInterfaces [JavaInterface] | JavaClasses [JavaClass] | JavaEnums [JavaEnum] deriving (Show, Eq)
 
-getPackage :: (Resource a) => a -> T.Text -> IO (Maybe JavaPackage)
+getPackage :: Resource -> T.Text -> IO (Maybe JavaPackage)
 getPackage res pacName =
     scrapeRes res (T.unpack pacName <> "/package-summary.html") $ do
         description <- text $ "section" @: [hasClass "packageDescription"] //
@@ -192,7 +194,7 @@ getPackage res pacName =
             putInPackage (JavaEnums es) p = p { packageEnums = es }
         pure $ foldr putInPackage (JavaPackage pacName description [] [] []) files
 
-getInterface :: (Resource a) => a -> T.Text -> T.Text -> IO (Maybe JavaInterface)
+getInterface :: Resource -> T.Text -> T.Text -> IO (Maybe JavaInterface)
 getInterface res pacName intPage =
     scrapeRes res (T.unpack pacName <> "/" <> T.unpack intPage) $ do
         name <- text $ "span" @: [hasClass "typeNameLabel"]
@@ -201,7 +203,7 @@ getInterface res pacName intPage =
         methods <- chroots ("section" @: [hasClass "methodDetails"] // "li" @: [hasClass "blockList"]) scrapeMethod
         pure $ JavaInterface name description methods
 
-getClass :: (Resource a) => a -> T.Text -> T.Text -> IO (Maybe JavaClass)
+getClass :: Resource -> T.Text -> T.Text -> IO (Maybe JavaClass)
 getClass res pacName clsPage =
     scrapeRes res (T.unpack pacName <> "/" <> T.unpack clsPage) $ do
         (clsSig, description) <- chroot ("section" @: [hasClass "description"]) $ do
@@ -214,7 +216,7 @@ getClass res pacName clsPage =
 
         pure $ JavaClass name clsSig description cons methods
 
-getEnum :: (Resource a) => a -> T.Text -> T.Text -> IO (Maybe JavaEnum)
+getEnum :: Resource -> T.Text -> T.Text -> IO (Maybe JavaEnum)
 getEnum res pacName enuPage =
     scrapeRes res (T.unpack pacName <> "/" <> T.unpack enuPage) $ do
         name <- text $ "span" @: [hasClass "typeNameLabel"]
