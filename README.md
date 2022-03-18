@@ -17,3 +17,4 @@ This will create:
 This will not create:
 - import statements, as these are a great pain - please do this with IntelliJ manually
 - compliable code - all methods are generated as empty `{}`. This will not compile because there's no return statement.
+- valid interfaces - since the same generator is used as classes, the interface will have `{}` as method bodies. You'll need to remove those and replace with a single semicolon after the conversion.
