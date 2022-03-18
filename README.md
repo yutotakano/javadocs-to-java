@@ -1,10 +1,16 @@
 # javadocs-to-java
 
-Makeshift script to convert rendered JavaDoc HTML files to Java files.
+Makeshift script to generate Java code from rendered JavaDoc HTML files.
 
 Created for my own use, please pardon my lack of comments.
 
-## To run:
+## To run
+
+### Prerequisites
+
+- [Stack](https://docs.haskellstack.org/en/stable/README/)
+
+### Command-line
 
 - `./converter.hs online https://homepages.inf.ed.ac.uk/...`
 - `./converter.hs local javadoc_dir`
