@@ -144,6 +144,8 @@ main = do
     packages <- catMaybes <$> mapM (getPackage res) packageNames
     forM_ packages $ \pac -> do
         createDirectoryIfMissing False $ T.unpack $ "src" <> "/" <> packageName pac
+        TIO.writeFile (T.unpack $ "src" <> "/" <> packageName pac <> "/package-info.java") $
+            render pac
         forM_ (packageInterfaces pac) $ \int -> do
             TIO.writeFile (T.unpack $ "src" <> "/" <> packageName pac <> "/" <> interfaceName int <> ".java") $
                 "package " <> packageName pac <> ";\n\n" <> render int
