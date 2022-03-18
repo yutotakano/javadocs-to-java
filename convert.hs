@@ -74,6 +74,7 @@ data JavaMethod = JavaMethod
     { methodName :: T.Text
     , methodDescription :: T.Text
     , methodModifiers :: T.Text
+    , methodReturnType :: Maybe T.Text
     , methodArgumentTypes :: [(T.Text, T.Text)]
     , methodJavaDocTags :: [(T.Text, Maybe T.Text)]
     } deriving (Show, Eq)
@@ -89,7 +90,11 @@ instance Render JavaMethod where
             | otherwise = commentify 4 $ methodDescription <> "\n\n" <> T.intercalate "\n" (map renderDocTag methodJavaDocTags)
 
         mods :: T.Text
-        mods = if methodModifiers == "" then "" else methodModifiers <> " "
+        mods
+            | methodModifiers == "" && methodReturnType == Nothing = "" 
+            | methodModifiers == "" = fromJust methodReturnType <> " "
+            | methodReturnType == Nothing = methodModifiers <> " "
+            | otherwise = methodModifiers <> " " <> fromJust methodReturnType <> " "
 
         renderDocTag :: (T.Text, Maybe T.Text) -> T.Text
         renderDocTag ("Returns:", Just val) = "@returns " <> val
@@ -123,22 +128,22 @@ defaultBaseUrl = "https://homepages.inf.ed.ac.uk/s2100747"
 
 main :: IO ()
 main = do
-    createDirectoryIfMissing False "src"
-    -- TODO if directory exists abort mayb
+    exists <- doesDirectoryExist "src"
+    when exists $ error "`src` directory already exists! This program will not overwrite it, so please delete/move the existing folder."
+    createDirectory "src"
     let res = InternetResource defaultBaseUrl
-    classPathMapping <- newMVar $ HM.empty
     packageNames <- getPackageNames res
     packages <- catMaybes <$> mapM (getPackage res) packageNames
     forM_ packages $ \pac -> do
-        createDirectoryIfMissing False $ T.unpack $ packageName pac
+        createDirectoryIfMissing False $ T.unpack $ "src" <> "/" <> packageName pac
         forM_ (packageInterfaces pac) $ \int -> do
-            TIO.writeFile (T.unpack $ packageName pac <> "/" <> interfaceName int <> ".java") $
+            TIO.writeFile (T.unpack $ "src" <> "/" <> packageName pac <> "/" <> interfaceName int <> ".java") $
                 "package " <> packageName pac <> ";\n\n" <> render int
         forM_ (packageClasses pac) $ \cls -> do
-            TIO.writeFile (T.unpack $ packageName pac <> "/" <> className cls <> ".java") $
+            TIO.writeFile (T.unpack $ "src" <> "/" <> packageName pac <> "/" <> className cls <> ".java") $
                 "package " <> packageName pac <> ";\n\n" <> render cls
         forM_ (packageEnums pac) $ \enu -> do
-            TIO.writeFile (T.unpack $ packageName pac <> "/" <> enumName enu <> ".java") $
+            TIO.writeFile (T.unpack $ "src" <> "/" <> packageName pac <> "/" <> enumName enu <> ".java") $
                 "package " <> packageName pac <> ";\n\n" <> render enu
 
 class Resource a where
@@ -221,6 +226,7 @@ scrapeMethod :: ScraperT T.Text IO JavaMethod
 scrapeMethod = chroot ("section" @: [hasClass "detail"]) $ do
     name <- text "h3"
     modifiers <- (text $ "div" @: [hasClass "memberSignature"] // "span" @: [hasClass "modifiers"]) <|> pure ""
+    returnType <- Just <$> (text $ "div" @: [hasClass "memberSignature"] // "span" @: [hasClass "returnType"]) <|> pure Nothing
     description <- (text $ "div" @: [hasClass "block"]) <|> pure ""
     argumentsTypesStr <- (texts $ "div" @: [hasClass "memberSignature"] // "span" @: [hasClass "arguments"]) <|> pure []
     let argumentTypes = if null argumentsTypesStr then [] else
@@ -241,7 +247,7 @@ scrapeMethod = chroot ("section" @: [hasClass "detail"]) $ do
                     pure (paramName, Just $ head t)
 
     let (additionalParam1, inheritRemovedDesc) = case T.take 33 description of
-            "Description copied from interface" -> ([("inheritDoc", Nothing)], T.drop 33 description)
+            "Description copied from interface" -> ([("inheritDoc", Nothing)], "")
             _ -> ([], description)
 
-    pure $ JavaMethod name inheritRemovedDesc modifiers argumentTypes (join params <> additionalParam1)
+    pure $ JavaMethod name inheritRemovedDesc modifiers returnType argumentTypes (join params <> additionalParam1)
