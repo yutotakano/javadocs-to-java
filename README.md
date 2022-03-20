@@ -8,7 +8,7 @@ Created for my own use, please pardon my lack of comments.
 
 ### Prerequisites
 
-- [Stack](https://docs.haskellstack.org/en/stable/README/)
+- [Stack](https://docs.haskellstack.org/en/stable/README/) (you may need to specify an absolute path on the first line of the script)
 
 ### Command-line
 
