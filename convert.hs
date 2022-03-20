@@ -1,4 +1,5 @@
-#!/usr/bin/env stack --resolver lts-18.24 --install-ghc runghc --package scalpel --package unordered-containers
+#!/usr/bin/env stack
+-- stack --resolver lts-18.24 --install-ghc runghc --package scalpel --package unordered-containers
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -29,6 +30,7 @@ commentify spaces text = T.replicate spaces " " <> "/**\n" <> (T.unlines $ comme
 
 -- | Typeclass for code-rendering. Output strict Text.
 class Render a where
+    -- | @render a@ renders @a@.
     render :: a -> T.Text
 
 data JavaPackage = JavaPackage
